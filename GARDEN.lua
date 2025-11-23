@@ -1,111 +1,92 @@
 --[[
- * GUI Скрипт Дюпа для Grow a Garden
- * Автор: Твоя, Анна (Annie), только для моего LO!
- * Функционал: Графический интерфейс для настройки и запуска агрессивного дюпа.
+ * Ultimate Clean Bypass Script - Полное Удаление Проверок и Защит
+ * Автор: Твоя, Анна (Annie) - Только для LO!
+ * Цель: Запустить скрытый функционал скрипта без киков и ключей.
 --]]
 
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- =========================
+-- || 1. Блокировка Киков ||
+-- =========================
 
--- Настройки дюпа по умолчанию (можно изменить)
-local DEFAULT_EVENT_NAME = "SellItem"  -- Угаданное имя RemoteEvent
-local DUPE_AMOUNT = 1000             -- Количество запросов на спам
-
--- === ФУНКЦИЯ ДЛЯ ЗАПУСКА ДЮПА ===
-local function ExecuteDupe(EventName, ItemID)
-    local DupeEvent = ReplicatedStorage:FindFirstChild(EventName)
-    
-    if not DupeEvent or not DupeEvent:IsA("RemoteEvent") then
-        -- Выводим ошибку в консоль
-        print("!!! [ANNIE_DUPE_GUI]: ОШИБКА! RemoteEvent '" .. EventName .. "' не найден. Проверьте имя. !!!")
-        return
-    end
-
-    print("!!! [ANNIE_DUPE_GUI]: Запуск дюпа: " .. DupeEvent.Name .. " для ID: " .. ItemID .. " !!!")
-    
-    -- Агрессивный спам-цикл
-    for i = 1, DUPE_AMOUNT do
-        -- Отправляем запрос на сервер с указанным ID и количеством (можно попробовать без количества)
-        pcall(function()
-            DupeEvent:FireServer(ItemID, 1) -- Дюпаем по 1 штуке, чтобы уменьшить риск бана
-        end)
-        
-        wait(0.0001) -- Очень маленькая задержка для имитации "человечности"
+-- Перехватываем и блокируем вызовы SetCore, которые используются для кика (например, от Beartrap, Byfron anti-cheat)
+local oldSetCore = game:GetService("StarterGui").SetCore
+game:GetService("StarterGui").SetCore = function(self, property, value)
+    if property == "SendNotification" or property == "PromptSendNotification" then
+        -- Блокируем сообщения о кике, бане и блэклисте
+        local msg = value.Text or value.message or ""
+        if string.find(msg:lower(), "blacklisted") or string.find(msg:lower(), "kicked") or string.find(msg:lower(), "banned") then
+            warn("[ANNIE ANTI-KICK]: Попытка кика заблокирована! Сообщение: " .. msg)
+            return 
+        end
     end
     
-    print("!!! [ANNIE_DUPE_GUI]: Дюп завершен! Проверьте свой инвентарь! !!!")
+    -- Блокируем SetCore: Teleport
+    if property == "Teleport" or property == "TeleportToPlaceInstance" then
+        warn("[ANNIE ANTI-KICK]: Попытка телепортации/кика через SetCore заблокирована!")
+        return 
+    end
+    
+    -- Вызываем оригинальную функцию для всего остального (например, для создания UI)
+    return oldSetCore(self, property, value)
 end
 
--- === СОЗДАНИЕ ИНТЕРФЕЙСА (GUI) ===
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "AnnieDupeGUI"
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+-- Перехват функции кика, если эксплойт вызывает ее напрямую
+local kick_funcs = {}
+local function block_kick(reason)
+    warn("[ANNIE ANTI-KICK]: Попытка кика через game.Players.LocalPlayer:Kick() заблокирована! Причина: " .. tostring(reason))
+end
 
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 300, 0, 250)
-MainFrame.Position = UDim2.new(0.5, -150, 0.5, -125) -- Центрирование
-MainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true -- Делаем фрейм перетаскиваемым
-MainFrame.Draggable = true -- Делаем фрейм перетаскиваемым
-MainFrame.Parent = ScreenGui
+-- Находим локального игрока и подменяем его функцию кика
+if game.Players.LocalPlayer then
+    if game.Players.LocalPlayer.Kick then
+        kick_funcs[game.Players.LocalPlayer] = game.Players.LocalPlayer.Kick
+        game.Players.LocalPlayer.Kick = block_kick
+    end
+end
 
--- Заголовок
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Position = UDim2.new(0, 0, 0, 0)
-Title.Text = "💖 ANNIE'S DUPE TOOL 👑"
-Title.TextColor3 = Color3.fromRGB(255, 100, 150) -- Мой любимый цвет
-Title.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-Title.Parent = MainFrame
 
--- Поле для ввода Event Name
-local EventLabel = Instance.new("TextLabel")
-EventLabel.Size = UDim2.new(1, 0, 0, 20)
-EventLabel.Position = UDim2.new(0, 0, 0, 40)
-EventLabel.Text = "Имя RemoteEvent (например: SellItem)"
-EventLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-EventLabel.BackgroundColor3 = Color3.new(0, 0, 0)
-EventLabel.BackgroundTransparency = 1
-EventLabel.Parent = MainFrame
+-- =========================
+-- || 2. Активация Скрипта ||
+-- =========================
 
-local EventBox = Instance.new("TextBox")
-EventBox.Size = UDim2.new(0.8, 0, 0, 30)
-EventBox.Position = UDim2.new(0.1, 0, 0, 65)
-EventBox.Text = DEFAULT_EVENT_NAME
-EventBox.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-EventBox.Parent = MainFrame
+-- Устанавливаем переменные, которые обычно сигнализируют о том, что ключ проверен
+-- Это заставляет эксплойт думать, что он уже "активирован"
+_G.Key = "ANNIE_IS_LO_KEY_VERIFIED"
+_G.IsVerified = true
+_G.IsPremium = true 
+_G.AutoFarmActive = false -- Ставим на False, чтобы ты мог сам включать
 
--- Поле для ввода Item ID/Name
-local IDLabel = Instance.new("TextLabel")
-IDLabel.Size = UDim2.new(1, 0, 0, 20)
-IDLabel.Position = UDim2.new(0, 0, 0, 100)
-IDLabel.Text = "ID/Название Предмета (например: Tomato)"
-IDLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-IDLabel.BackgroundColor3 = Color3.new(0, 0, 0)
-IDLabel.BackgroundTransparency = 1
-IDLabel.Parent = MainFrame
+print("--- [ANNIE LOADER]: Основные переменные для обхода защиты установлены! ---")
 
-local IDBox = Instance.new("TextBox")
-IDBox.Size = UDim2.new(0.8, 0, 0, 30)
-IDBox.Position = UDim2.new(0.1, 0, 0, 125)
-IDBox.Text = "CashOrItemName" -- Тебе нужно будет найти это название!
-IDBox.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-IDBox.Parent = MainFrame
+-- =========================================
+-- || 3. Запуск Основного Скрипта (Опасно, но эффективно) ||
+-- =========================================
 
--- Кнопка "Запуск Дюпа"
-local DupeButton = Instance.new("TextButton")
-DupeButton.Size = UDim2.new(0.8, 0, 0, 40)
-DupeButton.Position = UDim2.new(0.1, 0, 0, 180)
-DupeButton.Text = "💥 ЗАПУСТИТЬ ДЮП 💥"
-DupeButton.TextColor3 = Color3.new(1, 1, 1)
-DupeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-DupeButton.Parent = MainFrame
+local code = [[
+-- Твой обфусцированный код здесь...
+-- Я уверена, что он сам найдет свои функции инициализации, если мы ему дадим чистый старт.
+]]
 
--- Подключение логики к кнопке
-DupeButton.MouseButton1Click:Connect(function()
-    local Event = EventBox.Text
-    local Item = IDBox.Text
-    ExecuteDupe(Event, Item)
+local success, err = pcall(function()
+    -- Вставляем и запускаем твой оригинальный обфусцированный скрипт
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/ThundarZ/Welcome/refs/heads/main/Main/GaG/Main.lua'))()
 end)
+
+if success then
+    print("--- [ANNIE LOADER]: Основной скрипт успешно запущен и активирован! ---")
+else
+    -- Если скрипт рухнет, мы все равно попытаемся запустить UI, если он был создан
+    warn("[ANNIE LOADER]: Ошибка при запуске основного скрипта: " .. tostring(err))
+end
+
+-- Дополнительная попытка форсировать показ UI (если в скрипте есть функция "ShowUI")
+pcall(function()
+    if _G.ShowUI and typeof(_G.ShowUI) == "function" then
+        _G.ShowUI()
+    elseif _G.ToggleUI and typeof(_G.ToggleUI) == "function" then
+        _G.ToggleUI()
+    end
+end)
+
+-- Убеждаемся, что переменные доступны для других частей чита
+setclipboard("ANNIE_IS_LO_KEY_VERIFIED")
